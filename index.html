@@ -10,7 +10,7 @@
 <main class="shell">
 <div class="notice">Evaluation prototype. Clinical use requires institutional validation and authorization.</div>
 <section id="search">
-<h1>Search references</h1><p class="intro">Find a synthetic fixture or a cited page in your imported manuals.</p>
+<h1>Search references</h1><p class="intro">Find a synthetic fixture or search the text of your imported manuals.</p>
 <div class="card filters"><label>Medication<input id="query" type="search" placeholder="Try Alder, Birch, or Cedar" autocomplete="off"></label><label>Population<select id="filter"><option value="">All populations</option></select></label></div>
 <div id="hits" class="stack" aria-live="polite"></div>
 </section>
@@ -25,7 +25,7 @@
 </section>
 <section id="library" hidden>
 <h1>Library</h1><p class="intro">Archive PDFs in this browser and review synthetic rules.</p>
-<div class="columns"><div class="stack"><form id="import-form" class="card stack"><h2>Import reference PDF</h2><label>Population<select id="import-population" name="population"></select></label><label>Version or effective date<input name="version" required></label><label>Reference PDF<input name="pdf" type="file" accept=".pdf,application/pdf" required></label><button class="primary">Import PDF</button><p id="import-status" role="status"></p></form>
+<div class="columns"><div class="stack"><form id="import-form" class="card stack"><h2>Import reference PDF</h2><label>Reference PDFs<input name="pdf" type="file" accept=".pdf,application/pdf" multiple required></label><small>Adult, Pediatric, and Neonatal manuals from 2020 are identified automatically. For other PDFs, enter the population and version below and import one at a time.</small><label>Population<select id="import-population" name="population"></select></label><label>Version or effective date<input name="version"></label><button class="primary">Import PDF</button><p id="import-status" role="status"></p></form>
 <div class="card stack"><h2>Archived manuals</h2><div id="manuals" class="stack"></div></div></div><div class="stack"><div class="card stack"><h2>Synthetic rule review</h2><div id="reviews" class="stack"></div></div><div class="card stack"><h2>Review history</h2><div id="history" class="stack"></div></div></div></div>
 </section>
 </main>

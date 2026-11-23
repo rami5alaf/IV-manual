@@ -38,6 +38,11 @@ const population = $('population');
 const medicine = $('medicine');
 const selectedDemo = () => demos.find(demo => demo.id === medicine.value);
 const approvals = () => new Map(events.map(event => [event.fixture, event.approved ? event.reviewer : null]));
+const knownManuals = new Map(references.map(({ hash, population }) => [
+  hash,
+  { population, version: { Adult: '03 Dec 2020', Pediatric: '27 Apr 2020', Neonatal: '14 Apr 2020' }[population] },
+]));
+const normalizeSearch = value => value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
 const linkedReferences = () => references.flatMap(entry => {
   const manual = manuals.find(item => item.id === entry.hash && item.population === entry.population && item.pages.length >= entry.page);
   return manual ? [{ ...entry, manual }] : [];
@@ -108,7 +113,7 @@ $('close-reader').addEventListener('click', () => $('reader').close());
 $('reader').addEventListener('close', () => { currentReader++; });
 
 function renderSearch() {
-  const query = $('query').value.trim().toLowerCase();
+  const query = normalizeSearch($('query').value);
   const filter = $('filter').value;
   const includesPopulation = item => !filter || item.population === filter;
   const results = [];
@@ -118,8 +123,10 @@ function renderSearch() {
     card.append(node('summary', demo.name + ' · ' + demo.population), description(fields(demo)), node('small', demo.source));
     results.push(card);
   }
+  const citedPages = new Set();
   for (const entry of linkedReferences().filter(includesPopulation)) {
-    if (![entry.name, entry.alias].some(name => name.toLowerCase().includes(query))) continue;
+    if (![entry.name, entry.alias].some(name => normalizeSearch(name).includes(query))) continue;
+    citedPages.add(entry.manual.id + ":" + entry.page);
     const card = node('article', null, 'card stack');
     card.append(node('h2', entry.name), muted(`${citation(entry.manual)} · p. ${entry.page}`),
       action('Open cited page', () => openManual(entry.manual, entry.page)));
@@ -128,16 +135,25 @@ function renderSearch() {
   if (query.length >= 2) {
     for (const manual of manuals.filter(includesPopulation)) {
       manual.pages.forEach((content, offset) => {
-        const excerpt = content.split('\n').find(line => line.trimStart().toLowerCase().startsWith(query));
-        if (!excerpt) return;
+        if (citedPages.has(manual.id + ':' + (offset + 1))) return;
+        const pageText = normalizeSearch(content);
+        const match = pageText.indexOf(query);
+        if (match < 0) return;
         const card = node('article', null, 'card stack');
-        card.append(node('h2', excerpt.trim()), muted(`${citation(manual)} · p. ${offset + 1}`),
+        card.append(node('h2', `Text match · p. ${offset + 1}`), muted(citation(manual)),
+          muted('…' + pageText.slice(Math.max(0, match - 40), match + query.length + 60) + '…'),
           action('Open matching page', () => openManual(manual, offset + 1)));
         results.push(card);
       });
     }
   }
-  $('hits').replaceChildren(...(results.length ? results : [muted('No matching references.')]));
+  if (!results.length) results.push(muted('No matching references.'));
+  if (!manuals.length) {
+    const link = node('a', 'Import reference PDFs in Library');
+    link.href = '#library';
+    results.push(link);
+  }
+  $('hits').replaceChildren(...results);
 }
 $('query').addEventListener('input', renderSearch);
 $('filter').addEventListener('change', renderSearch);
@@ -238,51 +254,76 @@ function renderLibrary(openId) {
 const importForm = $('import-form');
 const importButton = importForm.querySelector('button');
 importButton.disabled = true;
-importForm.addEventListener('submit', async event => {
-  event.preventDefault();
-  const values = new FormData(importForm);
-  const file = values.get('pdf');
-  const version = values.get('version').trim();
-  const group = values.get('population');
-  const status = $('import-status');
-  if (!version) { status.textContent = 'Enter the manual version or effective date.'; return; }
-  if (!file.size) { status.textContent = 'Select a readable PDF.'; return; }
+async function archive(file, fallback, multiple, archived, status) {
+  const bytes = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  const id = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+  if (archived.has(id)) return 'Already archived';
+  const known = knownManuals.get(id);
+  if (!known && (multiple || !fallback.version)) {
+    return 'For this PDF, enter its population and version and import it separately';
+  }
   let pdf;
-  importButton.disabled = true;
-  status.textContent = 'Reading PDF locally…';
   try {
-    const bytes = await file.arrayBuffer();
-    const hash = await crypto.subtle.digest('SHA-256', bytes);
-    const id = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
-    const existing = (await records('manuals')).find(item => item.id === id);
-    if (existing) {
-      status.textContent = 'This PDF is already archived under ' + citation(existing) + '.';
-      return;
-    }
     pdf = await loadPDF(bytes);
     const pages = [];
     for (let page = 1; page <= pdf.numPages; page++) {
+      status.textContent = `Reading ${file.name} · page ${page} of ${pdf.numPages}…`;
       const text = await (await pdf.getPage(page)).getTextContent();
       pages.push(text.items.map(item => (item.str ?? '') + (item.hasEOL ? '\n' : ' ')).join(''));
     }
-    await add('manuals', { id, population: group, version, filename: file.name, file, pages, importedAt: Date.now() });
+    await add('manuals', {
+      ...(known ?? fallback), id, filename: file.name, file, pages, importedAt: Date.now(),
+    });
+    archived.add(id);
+    return pages.some(page => page.trim()) ? 'Archived' : 'Archived · no searchable text found';
+  } finally {
+    if (pdf) await pdf.destroy().catch(() => {});
+  }
+}
+
+importForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const values = new FormData(importForm);
+  const files = values.getAll('pdf').filter(file => file.size);
+  const fallback = { population: values.get('population'), version: values.get('version').trim() };
+  const status = $('import-status');
+  if (!files.length) { status.textContent = 'Select a readable PDF.'; return; }
+  importButton.disabled = true;
+  status.textContent = 'Reading PDFs locally…';
+  try {
+    const archived = new Set((await records('manuals')).map(manual => manual.id));
+    const messages = [];
+    for (const file of files) {
+      try {
+        messages.push(`${file.name} · ${await archive(file, fallback, files.length > 1, archived, status)}`);
+      } catch (error) {
+        const message = error?.name === 'QuotaExceededError' || error?.name === 'DataCloneError'
+          ? 'Browser storage could not save the PDF'
+          : 'Could not archive this PDF. Check that it is readable and unlocked';
+        messages.push(`${file.name} · ${message}`);
+      }
+    }
     await refreshManuals();
     renderSearch();
     renderLibrary();
     updateMedication(true);
-    importForm.elements.version.value = '';
-    importForm.elements.pdf.value = '';
-    status.textContent = 'PDF archived in this browser.';
+    status.replaceChildren(...messages.map(message => node('span', message)));
+    if (messages.every(message => / · (Archived|Already archived)/.test(message))) {
+      importForm.elements.version.value = '';
+      importForm.elements.pdf.value = '';
+    }
   } catch {
-    status.textContent = 'Could not archive this PDF. Choose a readable, unlocked PDF and check that browser storage is available.';
+    status.textContent = 'Could not access the reference library in this browser.';
   } finally {
-    if (pdf) await pdf.destroy().catch(() => {});
     importButton.disabled = false;
   }
 });
 
 async function refreshManuals() {
-  manuals = (await records('manuals')).sort((a, b) => b.importedAt - a.importedAt);
+  manuals = (await records('manuals'))
+    .map(manual => ({ ...manual, ...knownManuals.get(manual.id) }))
+    .sort((a, b) => b.importedAt - a.importedAt);
 }
 renderSearch();
 updateMedication();
