@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="IV SmartCheck browser-based evaluation prototype">
+<title>IV SmartCheck</title><link rel="icon" href="icon.png"><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="shell top"><div class="brand"><img src="icon.png" alt="" width="42" height="42">IV SmartCheck</div>
+<nav aria-label="Workspace"><a href="#search">Search</a><a href="#check">Double Check</a><a href="#library">Library</a></nav></div></header>
+<main class="shell">
+<div class="notice">Evaluation prototype. Clinical use requires institutional validation and authorization.</div>
+<section id="search">
+<h1>Search references</h1><p class="intro">Find a synthetic fixture or a cited page in your imported manuals.</p>
+<div class="card filters"><label>Medication<input id="query" type="search" placeholder="Try Alder, Birch, or Cedar" autocomplete="off"></label><label>Population<select id="filter"><option value="">All populations</option></select></label></div>
+<div id="hits" class="stack" aria-live="polite"></div>
+</section>
+<section id="check" hidden>
+<h1>Double Check</h1><p class="intro">Evaluate a preparation against an active synthetic rule.</p>
+<div class="columns"><form id="check-form" class="card stack">
+<fieldset><legend>Medication</legend><div class="fields"><label>Population<select id="population"></select></label><label>Medication<select id="medicine" required></select></label></div></fieldset>
+<fieldset><legend>Preparation</legend><div class="fields"><label>Dose in final preparation<input name="dose" inputmode="decimal"></label><label>Dose units<select name="unit"><option>mg</option><option>mcg</option><option>g</option><option>units</option><option>mmol</option><option>mEq</option></select></label><label>Final volume (mL)<input name="volume" inputmode="decimal"></label><label>Diluent<input name="diluent"></label><label id="access-field" hidden>Access<select name="access"><option value="">Select</option><option>Central</option><option>Peripheral</option></select></label></div></fieldset>
+<fieldset><legend>Infusion</legend><label class="inline"><input name="byRate" type="checkbox"> Enter pump rate</label><label><span id="infusion-label">Duration (minutes)</span><input name="infusion" inputmode="decimal"></label></fieldset>
+<button class="primary" type="submit" id="run">Run double check</button></form>
+<div id="result" class="card stack" aria-live="polite"></div></div>
+</section>
+<section id="library" hidden>
+<h1>Library</h1><p class="intro">Archive PDFs in this browser and review synthetic rules.</p>
+<div class="columns"><div class="stack"><form id="import-form" class="card stack"><h2>Import reference PDF</h2><label>Population<select id="import-population" name="population"></select></label><label>Version or effective date<input name="version" required></label><label>Reference PDF<input name="pdf" type="file" accept=".pdf,application/pdf" required></label><button class="primary">Import PDF</button><p id="import-status" role="status"></p></form>
+<div class="card stack"><h2>Archived manuals</h2><div id="manuals" class="stack"></div></div></div><div class="stack"><div class="card stack"><h2>Synthetic rule review</h2><div id="reviews" class="stack"></div></div><div class="card stack"><h2>Review history</h2><div id="history" class="stack"></div></div></div></div>
+</section>
+</main>
+<dialog id="reader"><div class="reader-head"><h2 id="citation">Manual reference</h2><button id="close-reader">Close</button></div><div id="reader-content" class="stack"></div></dialog>
+<script type="module" src="app.mjs"></script>
+</body></html>
